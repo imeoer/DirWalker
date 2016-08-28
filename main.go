@@ -94,7 +94,7 @@ func main() {
 		go func() {
 			defer limiter.Done()
 			sum := shasum(path)
-			if (sum != nil ) {
+			if sum != nil {
 				_, err = fmt.Printf("%s, %x, %d\n", path, sum, info.Size())
 				check(err)
 			}
