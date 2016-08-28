@@ -28,7 +28,9 @@ func check(err error) bool {
 
 func shasum(path string) []byte {
 	fi, err := os.Open(path)
-	check(err)
+	if !check(err) {
+		return nil
+	}
 	defer func() {
 		if err := fi.Close(); err != nil {
 			check(err)
@@ -39,7 +41,9 @@ func shasum(path string) []byte {
 	for {
 		n, err := fi.Read(buf)
 		if err != nil && err != io.EOF {
-			check(err)
+			if !check(err) {
+				return nil
+			}
 		}
 		if n == 0 {
 			break
@@ -50,25 +54,30 @@ func shasum(path string) []byte {
 }
 
 func main() {
-	// Parse command line arguments
+	// Parse target directory arguments
 	args := os.Args
-	patterns := make([]string, 0)
-	target := "./"
 	argsLen := len(args)
+	target := filepath.Dir(args[0])
 	if argsLen > 1 {
 		target = args[1]
 	}
+	absTarget, err := filepath.Abs(target)
+	if !check(err) {
+		return
+	}
+	// Parse ignored directories arguments
+	patterns := make([]string, 0)
 	if argsLen > 2 {
 		for _, path := range args[2:] {
 			patterns = append(patterns, path)
 		}
 	}
-	absTarget, err := filepath.Abs(target)
-	check(err)
-	limiter := NewLimter()
 	// Walk the specific directory
+	limiter := NewLimter()
 	filepath.Walk(absTarget, func(path string, info os.FileInfo, err error) error {
-		check(err)
+		if !check(err) {
+			return nil
+		}
 		// Ignore directory or file by pattern
 		isDir := info.IsDir()
 		if ignore(patterns, path) {
@@ -83,10 +92,12 @@ func main() {
 		// Calculate SHA1 of file
 		limiter.Add()
 		go func() {
+			defer limiter.Done()
 			sum := shasum(path)
-			_, err = fmt.Printf("%s, %x, %d\n", path, sum, info.Size())
-			check(err)
-			limiter.Done()
+			if (sum != nil ) {
+				_, err = fmt.Printf("%s, %x, %d\n", path, sum, info.Size())
+				check(err)
+			}
 		}()
 		return nil
 	})
