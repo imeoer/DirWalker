@@ -1,4 +1,4 @@
-package main
+package limiter
 
 import (
 	"sync"
@@ -13,7 +13,7 @@ type Limiter struct {
 	count chan bool
 }
 
-func NewLimter() *Limiter {
+func New() *Limiter {
 	limiter := new(Limiter)
 	limiter.count = make(chan bool, MAX_OPEN_NUMBER)
 	return limiter

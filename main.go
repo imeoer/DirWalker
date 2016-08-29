@@ -2,11 +2,16 @@ package main
 
 import (
 	"crypto/sha1"
+	"flag"
 	"fmt"
+	"github.com/imeoer/dirwalker/limiter"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 func ignore(patterns []string, path string) bool {
@@ -53,34 +58,16 @@ func shasum(path string) []byte {
 	return hash.Sum(nil)
 }
 
-func main() {
-	// Parse target directory arguments
-	args := os.Args
-	argsLen := len(args)
-	target := filepath.Dir(args[0])
-	if argsLen > 1 {
-		target = args[1]
-	}
-	absTarget, err := filepath.Abs(target)
-	if !check(err) {
-		return
-	}
-	// Parse ignored directories arguments
-	patterns := make([]string, 0)
-	if argsLen > 2 {
-		for _, path := range args[2:] {
-			patterns = append(patterns, path)
-		}
-	}
-	// Walk the specific directory
-	limiter := NewLimter()
-	filepath.Walk(absTarget, func(path string, info os.FileInfo, err error) error {
+func walk(target string, ignores []string) []string {
+	results := make([]string, 0)
+	limit := limiter.New()
+	filepath.Walk(target, func(path string, info os.FileInfo, err error) error {
 		if !check(err) {
 			return nil
 		}
 		// Ignore directory or file by pattern
 		isDir := info.IsDir()
-		if ignore(patterns, path) {
+		if ignore(ignores, path) {
 			if isDir {
 				return filepath.SkipDir
 			}
@@ -90,16 +77,55 @@ func main() {
 			return nil
 		}
 		// Calculate SHA1 of file
-		limiter.Add()
+		limit.Add()
 		go func() {
-			defer limiter.Done()
+			defer limit.Done()
 			sum := shasum(path)
 			if sum != nil {
-				_, err = fmt.Printf("%s, %x, %d\n", path, sum, info.Size())
-				check(err)
+				result := fmt.Sprintf("%s, %x, %d\n", path, sum, info.Size())
+				fmt.Print(result)
+				results = append(results, result)
 			}
 		}()
 		return nil
 	})
-	limiter.Wait()
+	limit.Wait()
+	sort.Strings(results)
+	return results
+}
+
+func main() {
+	// Define output path arguments
+	output := flag.String("o", "", "")
+	// Define command help
+	flag.Usage = func() {
+		fmt.Printf("%s\n\t%s\n",
+			"Usage: dirwalker [path] [to/ignore/path]...",
+			"-o Specific output file path, example: -o=result.txt")
+	}
+	flag.Parse()
+	// Parse target directory arguments
+	args := flag.Args()
+	argsLen := len(args)
+	target := filepath.Dir(os.Args[0])
+	if argsLen > 0 {
+		target = args[0]
+	}
+	absTarget, err := filepath.Abs(target)
+	if !check(err) {
+		return
+	}
+	// Parse ignored files / directories arguments
+	ignores := make([]string, 0)
+	if argsLen > 1 {
+		for _, path := range args[1:] {
+			ignores = append(ignores, path)
+		}
+	}
+	// Walk the specific directory
+	results := walk(absTarget, ignores)
+	if *output != "" {
+		err = ioutil.WriteFile(*output, []byte(strings.Join(results, "")), 0644)
+		check(err)
+	}
 }
