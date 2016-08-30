@@ -119,7 +119,10 @@ func main() {
 	ignores := make([]string, 0)
 	if argsLen > 1 {
 		for _, path := range args[1:] {
-			ignores = append(ignores, path)
+			path, err = filepath.Abs(path)
+			if check(err) {
+				ignores = append(ignores, path)
+			}
 		}
 	}
 	// Walk the specific directory
